@@ -1,12 +1,8 @@
-from random import seed
-from random import random
-import numpy as np
-
-seed(77777)
+from world import *
 
 
 # 定义各项属性
-class Attributes(object):
+class Attributes(Object):
     MaxHealth = 100
     MaxMana = 0
     Attack = 0
@@ -42,136 +38,77 @@ class Attributes(object):
             self.Accuracy = args[12]
 
 
-class StatusEffects(object):
+class StatusEffects(Object):
     Modified = False
-    meta = {}
+    meta = None
+
+    def __init__(self):
+        self.meta = {}
 
     def tick(self):
-        pass
+        to_remove = []
+        for s, v in list(self.meta.items()):
+            if v.duration < 1:
+                to_remove.append(s)
+            else:
+                v.tick()
+        [self.meta.pop(s, None) for s in tuple(to_remove)]
 
     def get_multipliers(self):
         a, b, c, d = np.array([1] * 2), np.array([1] * 2), np.array([1] * 2), np.array([1.0] * Attributes.get_length())
-        for s in self.meta:
-            s.action()
-            a *= s.damage_multiplier
-            b *= s.defence_multiplier
-            c *= s.heal_multiplier
-            d *= s.attrMultiplier
+        for _, v in self.meta.items():
+            a *= v.damage_multiplier
+            b *= v.defence_multiplier
+            c *= v.heal_multiplier
+            d *= v.attrMultiplier
         return a, b, c, Attributes(*d)
 
 
-class Alliance(object):
-    meta = {
-        "Team1": [1, -1, 0],
-        "Team2": [-1, 1, 0],
-        "Neutral": [0, 0, 0]
-    }
-
-
-class Controller:
-    owner = []
-    alliance = "Neutral"
-
-    def tick(self):
-        pass
-
-
-class Object:
-    name = "New Object"
-
-    def tick(self):
-        pass
-
-
-class Actor(Object):
-    name = "New Actor"
-    owner = Controller()
-    attr = Attributes()
-    status = StatusEffects()
-
-    health = attr.MaxHealth
-    mana = 0
-    isDead = False
-
-    def receive_damage(self, dmg):
-        self.health -= dmg
-        if self.health <= 0:
-            self.health = 0
-            self.death()
-
-    def receive_heal(self, heal):
-        self.health += heal
-        if self.health > self.attr.MaxHealth:
-            self.health = self.attr.MaxHealth
-
-    def death(self):
-        self.isDead = True
-        print(self.name + " is dead.")
-
-
 class Status(Object):
-    MaxTime = 0
+    name = "new status"
+    duration = 0
+    owner = None
     damage_multiplier = np.array([1] * 2)  # 物理/魔法
     defence_multiplier = np.array([1] * 2)  # 物理/魔法
     heal_multiplier = np.array([1] * 2)  # 治疗/被治疗
     attrMultiplier = np.array([1.0] * Attributes.get_length())
-    owner = Actor()
+
+    def __init__(self, name="new status", duration=0, owner=None):
+        self.name = name
+        self.duration = duration
+        self.owner = owner
+        self.on_begin_action()
+
+    def tick(self):
+        self.duration -= 1
+
+        if self.duration < 1:
+            return
+        if self.duration > 1:
+            self.action()
+        else:
+            self.on_end_action()
 
     def action(self):
         # any modification to self happens here
         pass
 
+    def on_begin_action(self):
+        pass
 
-class World:
-    time = 0  # ms
-    players = {}
-    objects = {}
-
-    def add_object(self, obj):
-        index = 1
-
-        while True:
-            name = obj.name + str(index)
-            if name in self.objects:
-                index += 1
-                continue
-            else:
-                obj.name = name
-                self.objects[name] = obj
-                print(name+" is added into world.")
-                break
-
-    def tick(self):
-        for _, obj in self.objects.items():
-            obj.tick()
-        self.time += 1
-
-    def tick1000(self):
-        for _ in range(1000):
-            self.tick()
-
-        print(self.get_timelabel())
-
-    def tickN(self, n):
-        for _ in range(n):
-            self.tick()
-
-        print(self.get_timelabel())
-
-    def get_datetime(self):
-        hh = np.floor(self.time / 1000 / 3600)
-        mm = np.floor(self.time / 1000 / 60) - hh * 60
-        ss = self.time / 1000 - hh * 3600 - mm * 60
-        return int(hh), int(mm), ss
-
-    def get_timelabel(self):
-        hh, mm, ss = self.get_datetime()
-        return str(hh) + ":" + str(mm) + ":" + str(ss) + " "
+    def on_end_action(self):
+        pass
 
 
 class Inspector(Object):
-    world = World()
-    name = "New Inspector"
+    world = None
+    name = "Inspector"
+
+    def __init__(self, world=None):
+        self.world = world
+
+        if world:
+            world.add_object(self)
 
     def apply_physical_damage(self, factor, sender, receiver):
         if receiver.isDead:
@@ -206,9 +143,11 @@ class Inspector(Object):
         assert damage >= 0, "Damage should be non-negative"
 
         if is_critical_hit:
-            print(self.world.get_timelabel() + sender.name + " deals " + str(damage) + "! physical damage to " + receiver.name)
+            print(self.world.get_timelabel() + sender.name + " deals " + str(
+                damage) + "! physical damage to " + receiver.name)
         else:
-            print(self.world.get_timelabel() + sender.name + " deals " + str(damage) + " physical damage to " + receiver.name)
+            print(self.world.get_timelabel() + sender.name + " deals " + str(
+                damage) + " physical damage to " + receiver.name)
 
         receiver.receive_damage(damage)
 
@@ -245,9 +184,11 @@ class Inspector(Object):
         assert damage >= 0, "Damage should be non-negative"
 
         if is_critical_hit:
-            print(self.world.get_timelabel() + sender.name + " deals " + str(damage) + "! magic damage to " + receiver.name)
+            print(self.world.get_timelabel() + sender.name + " deals " + str(
+                damage) + "! magic damage to " + receiver.name)
         else:
-            print(self.world.get_timelabel() + sender.name + " deals " + str(damage) + " magic damage to " + receiver.name)
+            print(self.world.get_timelabel() + sender.name + " deals " + str(
+                damage) + " magic damage to " + receiver.name)
 
         receiver.receive_damage(damage)
 
